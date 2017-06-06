@@ -135,12 +135,14 @@ int main() {
         else {
             printf("No process currently running.\n");
         }
+
         /*PRINT WAITING PROCESSES*/
         printf("\nPROCESSES WAITING:\n");
         for (i = waiting.start; i < waiting.processesInList; i++) {
             printf("%d ", waiting.processList[i].id);
         }
         printf("\n");
+
         /*PRINT PROCESSES ON I/O INTERRUPTION*/
 
         currentTime++;
@@ -220,11 +222,19 @@ Process findProcessById(ProcessQueue list, int processId) {
 }
 
 void pushToProcessQueue(ProcessQueue *queue, Process process) {
+    if (queue->processesInList == queue->maxListSize) {
+        queue->processList = (Process*) realloc(queue->processList, 2 * queue->maxListSize * sizeof(Process));
+        queue->maxListSize *= 2;
+    }
     queue->processList[queue->processesInList] = process;
     queue->processesInList++;
 }
 
 void pushToEventQueue(EventQueue *queue, Event event) {
+    if (queue->eventsInList == queue->maxListSize) {
+        queue->eventList = (Event*) realloc(queue->eventList, 2 * queue->maxListSize * sizeof(Event));
+        queue->maxListSize *= 2;
+    }
     queue->eventList[queue->eventsInList] = event;
     queue->eventsInList++;
 }
