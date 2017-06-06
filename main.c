@@ -13,36 +13,39 @@ typedef struct _event {
     int id, type, eventTime;
 } Event;
 
-typedef struct _eventQueue {
+typedef struct _eventVector {
     int maxListSize, eventsInList, start;
     Event* eventList;
-} EventQueue;
+} EventVector;
 
-typedef struct _processQueue {
+typedef struct _processVector {
     int maxListSize, processesInList, start;
     Process* processList;
-} ProcessQueue;
+} ProcessVector;
 
 Process processConstructor(int, int, int, int, int*);
 Event eventConstructor(int, int, int);
-EventQueue eventQueueConstructor(int);
-ProcessQueue processQueueConstructor(int);
+EventVector eventVectorConstructor(int);
+ProcessVector processVectorConstructor(int);
 int compareEvents(const void*, const void*);
-void sortEventList(EventQueue*);
-Process findProcessById(ProcessQueue, int);
-void pushToProcessQueue(ProcessQueue*, Process);
-void pushToEventQueue(EventQueue*, Event);
+int compareProcesses(const void*, const void*);
+void sortEventList(EventVector*);
+void sortProcessList(ProcessVector*);
+Process findProcessById(ProcessVector, int);
+void pushToProcessVector(ProcessVector*, Process);
+void pushToEventVector(EventVector*, Event);
+Process popFromProcessVector(ProcessVector*);
 
 int main() {
     int numberOfProcesses;
     int currentTime = 0;
     int currentProcess = -1;
-    EventQueue events;
-    ProcessQueue list;
-    ProcessQueue waiting;
+    EventVector events;
+    ProcessVector list;
+    ProcessVector waiting;
 
     scanf("%d", &numberOfProcesses);
-    list = processQueueConstructor(numberOfProcesses);
+    list = processVectorConstructor(numberOfProcesses);
 
     /*READING THE INPUT*/
     for (int i = 0; i < numberOfProcesses; i++) {
@@ -62,7 +65,7 @@ int main() {
             newIo[j] = newIoTime;
         }
 
-        pushToProcessQueue(&list, processConstructor(newId, newStartTime, newEstTime, ioInterruptions, newIo));
+        pushToProcessVector(&list, processConstructor(newId, newStartTime, newEstTime, ioInterruptions, newIo));
     }
 
     /*CHECKING IF IT WAS ALL READ FINE*/
@@ -80,14 +83,14 @@ int main() {
     }*/
 
     /*CREATING THE QUEUE*/
-    events = eventQueueConstructor(numberOfProcesses);
+    events = eventVectorConstructor(numberOfProcesses);
     for (int i = 0; i < numberOfProcesses; i++) {
-        pushToEventQueue(&events, eventConstructor(list.processList[i].id, 0, list.processList[i].startTime));
+        pushToEventVector(&events, eventConstructor(list.processList[i].id, 0, list.processList[i].startTime));
     }
     sortEventList(&events);
 
     /*CREATING THE WAITING QUEUE*/
-    waiting = processQueueConstructor(numberOfProcesses);
+    waiting = processVectorConstructor(numberOfProcesses);
 
     /*CHECKING IF EVENT QUEUE WAS CORRECTLY CREATED*/
     /*if (DEBUG) {
@@ -118,13 +121,23 @@ int main() {
                 case 0:                
                     printf("Process %d wants to enter the waiting queue.\n", events.eventList[events.start].id);
                     Process toEnter = findProcessById(list, events.eventList[events.start].id);
-                    pushToProcessQueue(&waiting, toEnter);
+                    pushToProcessVector(&waiting, toEnter);
                     printf("Process %d entered the waiting queue.\n", events.eventList[events.start].id);
                     break;
                 default:
                     printf("Something\'s not quite right...\n");
             }
             events.start++;
+        }
+
+        if (currentProcess == -1 && waiting.start < waiting.processesInList) {
+            sortProcessList(&waiting);
+            Process nextProcess = popFromProcessVector(&waiting);
+            currentProcess = nextProcess.id;
+
+            printf("Process %d has begun execution.\n", currentProcess);
+
+            /*NEED TO CREATE EVENT OF PROCESS EXIT*/
         }
 
         /*PRINT CURRENT PROCESS*/
@@ -178,8 +191,8 @@ Event eventConstructor(int _id, int _type, int _eventTime) {
     return temp;
 }
 
-EventQueue eventQueueConstructor(int _size) {
-    EventQueue temp;
+EventVector eventVectorConstructor(int _size) {
+    EventVector temp;
 
     temp.eventsInList = 0;
     temp.start = 0;
@@ -190,8 +203,8 @@ EventQueue eventQueueConstructor(int _size) {
     return temp;
 }
 
-ProcessQueue processQueueConstructor(int _size) {
-    ProcessQueue temp;
+ProcessVector processVectorConstructor(int _size) {
+    ProcessVector temp;
 
     temp.processesInList = 0;
     temp.start = 0;
@@ -209,11 +222,22 @@ int compareEvents(const void *e1, const void *e2) {
     return (event1.eventTime - event2.eventTime);
 }
 
-void sortEventList(EventQueue *events) {
+int compareProcesses(const void *p1, const void *p2) {
+    Process process1 = *((Process*) p1);
+    Process process2 = *((Process*) p2);
+
+    return (process1.estTime - process2.estTime);
+}
+
+void sortEventList(EventVector *events) {
     qsort(events->eventList, events->eventsInList, sizeof(Event), compareEvents);
 }
 
-Process findProcessById(ProcessQueue list, int processId) {
+void sortProcessList(ProcessVector *processes) {
+    qsort(processes->processList, processes->processesInList, sizeof(Process), compareProcesses);
+}
+
+Process findProcessById(ProcessVector list, int processId) {
     int i;
     for (i = list.start; i < list.processesInList; i++) {
         if (list.processList[i].id == processId) return list.processList[i];
@@ -221,20 +245,26 @@ Process findProcessById(ProcessQueue list, int processId) {
     return list.processList[list.start];
 }
 
-void pushToProcessQueue(ProcessQueue *queue, Process process) {
-    if (queue->processesInList == queue->maxListSize) {
-        queue->processList = (Process*) realloc(queue->processList, 2 * queue->maxListSize * sizeof(Process));
-        queue->maxListSize *= 2;
+void pushToProcessVector(ProcessVector *vector, Process process) {
+    if (vector->processesInList == vector->maxListSize) {
+        vector->processList = (Process*) realloc(vector->processList, 2 * vector->maxListSize * sizeof(Process));
+        vector->maxListSize *= 2;
     }
-    queue->processList[queue->processesInList] = process;
-    queue->processesInList++;
+    vector->processList[vector->processesInList] = process;
+    vector->processesInList++;
 }
 
-void pushToEventQueue(EventQueue *queue, Event event) {
-    if (queue->eventsInList == queue->maxListSize) {
-        queue->eventList = (Event*) realloc(queue->eventList, 2 * queue->maxListSize * sizeof(Event));
-        queue->maxListSize *= 2;
+void pushToEventVector(EventVector *vector, Event event) {
+    if (vector->eventsInList == vector->maxListSize) {
+        vector->eventList = (Event*) realloc(vector->eventList, 2 * vector->maxListSize * sizeof(Event));
+        vector->maxListSize *= 2;
     }
-    queue->eventList[queue->eventsInList] = event;
-    queue->eventsInList++;
+    vector->eventList[vector->eventsInList] = event;
+    vector->eventsInList++;
+}
+
+Process popFromProcessVector(ProcessVector *vector) {
+    Process temp = vector->processList[vector->start];
+    vector->start++;
+    return temp;
 }
