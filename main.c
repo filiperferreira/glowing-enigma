@@ -259,7 +259,17 @@ int compareProcesses(const void *p1, const void *p2) {
     Process process1 = *((Process*) p1);
     Process process2 = *((Process*) p2);
 
-    return (process1.estTime - process2.estTime);
+    int time1 = process1.estTime;
+    int time2 = process2.estTime;
+
+    if (process1.io.start != process1.io.ioInList) {
+        time1 = process1.io.ioTimes[process1.io.start];
+    }
+    if (process2.io.start != process2.io.ioInList) {
+        time2 = process2.io.ioTimes[process2.io.start];
+    }
+
+    return (time1 - time2);
 }
 
 void sortEventList(EventVector *events) {
