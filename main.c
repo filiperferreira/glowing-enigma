@@ -1,12 +1,16 @@
-#define DEBUG 1
+#define IO_TIME 5
 
 #include <stdio.h>
 #include <stdlib.h>
 
-/*1 <= estTime <= 100*/
+typedef struct _ioVector {
+    int maxListSize, ioInList, start;
+    int* ioTimes;
+} IOVector;
+
 typedef struct _process {
-    int id, startTime, estTime, ioSize;
-    int* io;
+    int id, startTime, estTime;
+    IOVector io;
 } Process;
 
 typedef struct _event {
@@ -27,6 +31,7 @@ Process processConstructor(int, int, int, int, int*);
 Event eventConstructor(int, int, int);
 EventVector eventVectorConstructor(int);
 ProcessVector processVectorConstructor(int);
+IOVector ioVectorConstructor(int);
 int compareEvents(const void*, const void*);
 int compareProcesses(const void*, const void*);
 void sortEventList(EventVector*);
@@ -34,15 +39,18 @@ void sortProcessList(ProcessVector*);
 Process findProcessById(ProcessVector, int);
 void pushToProcessVector(ProcessVector*, Process);
 void pushToEventVector(EventVector*, Event);
+void pushToIOVector(IOVector*, int);
 Process popFromProcessVector(ProcessVector*);
+int popFromIOVector(IOVector*);
 
 int main() {
     int numberOfProcesses;
     int currentTime = 0;
-    int currentProcess = -1;
+    Process currentProcess;
     EventVector events;
     ProcessVector list;
     ProcessVector waiting;
+    ProcessVector ioWaiting;
 
     scanf("%d", &numberOfProcesses);
     list = processVectorConstructor(numberOfProcesses);
@@ -68,46 +76,18 @@ int main() {
         pushToProcessVector(&list, processConstructor(newId, newStartTime, newEstTime, ioInterruptions, newIo));
     }
 
-    /*CHECKING IF IT WAS ALL READ FINE*/
-    /*if (DEBUG) {
-        printf("Listing all processes:\n");
-        for (int i = 0; i < numberOfProcesses; i++) {
-            printf("Process number %d:\n", list[i].id);
-            printf("Start Time: %d\n", list[i].startTime);
-            printf("Duration: %d\n", list[i].estTime);
-            for (int j = 0; j < list[i].ioSize; j++) {
-                printf("IO interruption at time %d.\n", list[i].io[j]);
-            }
-        }
-        printf("\n");
-    }*/
-
     /*CREATING THE QUEUE*/
     events = eventVectorConstructor(numberOfProcesses);
     for (int i = 0; i < numberOfProcesses; i++) {
-        pushToEventVector(&events, eventConstructor(list.processList[i].id, 0, list.processList[i].startTime));
+        Event newEvent = eventConstructor(list.processList[i].id, 0, list.processList[i].startTime);
+        pushToEventVector(&events, newEvent);
     }
     sortEventList(&events);
 
     /*CREATING THE WAITING QUEUE*/
     waiting = processVectorConstructor(numberOfProcesses);
-
-    /*CHECKING IF EVENT QUEUE WAS CORRECTLY CREATED*/
-    /*if (DEBUG) {
-        printf("Listing all events in queue:\n");
-        for (int i = 0; i < events.start + events.eventsInList; i++) {
-            printf("Process number %d:\n", events.eventList[i].id);
-            switch(events.eventList[i].type) {
-                case 0:
-                    printf("Type: Arrival\n");
-                    break;
-                default:
-                    printf("Something\'s not quite right...\n");
-            }
-            printf("Will happen at time %d.\n", events.eventList[i].eventTime);
-        }
-        printf("\n");
-    }*/
+    ioWaiting = processVectorConstructor(numberOfProcesses);
+    currentProcess.id = -1;
 
     while (events.eventsInList != events.start) {
         int i;
@@ -116,13 +96,29 @@ int main() {
         /*CHECK WHICH EVENT WILL HAPPEN NOW*/
         /*MORE THAN 1 EVENT CAN OCCUR AT ONCE, MUST BE A WHILE LOOP*/
         printf("\nEVENTS:\n");
+        sortEventList(&events);
         while (events.eventList[events.start].eventTime == currentTime) {
             switch (events.eventList[events.start].type) {
                 case 0:                
-                    printf("Process %d wants to enter the waiting queue.\n", events.eventList[events.start].id);
+                    printf("Process %d entered the waiting queue.\n", events.eventList[events.start].id);
                     Process toEnter = findProcessById(list, events.eventList[events.start].id);
                     pushToProcessVector(&waiting, toEnter);
-                    printf("Process %d entered the waiting queue.\n", events.eventList[events.start].id);
+                    break;
+                case 1:
+                    printf("Process %d has finished execution.\n", currentProcess.id);
+                    currentProcess.id = -1;
+                    break;
+                case 2:
+                    printf("Process %d is waiting for an IO event to finish.\n", currentProcess.id);
+                    pushToProcessVector(&ioWaiting, currentProcess);
+                    Event newEvent = eventConstructor(currentProcess.id, 3, currentTime + IO_TIME);
+                    pushToEventVector(&events, newEvent);
+                    currentProcess.id = -1;
+                    break;
+                case 3:
+                    printf("IO of process %d has finished. Process %d returned to waiting queue.\n", events.eventList[events.start].id, events.eventList[events.start].id);
+                    Process returningProcess = popFromProcessVector(&ioWaiting);
+                    pushToProcessVector(&waiting, returningProcess);
                     break;
                 default:
                     printf("Something\'s not quite right...\n");
@@ -130,20 +126,32 @@ int main() {
             events.start++;
         }
 
-        if (currentProcess == -1 && waiting.start < waiting.processesInList) {
+        if (currentProcess.id == -1 && waiting.start < waiting.processesInList) {
             sortProcessList(&waiting);
-            Process nextProcess = popFromProcessVector(&waiting);
-            currentProcess = nextProcess.id;
+            currentProcess = popFromProcessVector(&waiting);
 
-            printf("Process %d has begun execution.\n", currentProcess);
+            printf("Process %d has begun execution.\n", currentProcess.id);
 
-            /*NEED TO CREATE EVENT OF PROCESS EXIT*/
+            Event newEvent;
+            if (currentProcess.io.start != currentProcess.io.ioInList) {
+                int finishTime = popFromIOVector(&currentProcess.io);
+                currentProcess.estTime -= finishTime;
+                for (int i = currentProcess.io.start; i < currentProcess.io.ioInList; i++) {
+                    currentProcess.io.ioTimes[i] -= finishTime;
+                }
+                newEvent = eventConstructor(currentProcess.id, 2, currentTime + finishTime);
+            }
+            else {
+                int finishTime = currentProcess.estTime;
+                newEvent = eventConstructor(currentProcess.id, 1, currentTime + finishTime);
+            }
+            pushToEventVector(&events, newEvent);
         }
 
         /*PRINT CURRENT PROCESS*/
         printf("\nCURRENT PROCESS:\n");
-        if (currentProcess != -1) {
-            printf("Currently running process %d.\n", currentProcess);
+        if (currentProcess.id != -1) {
+            printf("Currently running process %d.\n", currentProcess.id);
         }
         else {
             printf("No process currently running.\n");
@@ -151,12 +159,27 @@ int main() {
 
         /*PRINT WAITING PROCESSES*/
         printf("\nPROCESSES WAITING:\n");
-        for (i = waiting.start; i < waiting.processesInList; i++) {
-            printf("%d ", waiting.processList[i].id);
+        if (waiting.start == waiting.processesInList) {
+            printf("No processes waiting.\n");
         }
-        printf("\n");
+        else {
+            for (i = waiting.start; i < waiting.processesInList; i++) {
+                printf("%d ", waiting.processList[i].id);
+            }
+            printf("\n");
+        }
 
         /*PRINT PROCESSES ON I/O INTERRUPTION*/
+        printf("\nPROCESSES WAITING ON IO:\n");
+        if (ioWaiting.start == ioWaiting.processesInList) {
+            printf("No processes waiting on IO.\n");
+        }
+        else {
+            for (i = ioWaiting.start; i < ioWaiting.processesInList; i++) {
+                printf("%d ", ioWaiting.processList[i].id);
+            }
+            printf("\n");
+        }
 
         currentTime++;
     }
@@ -166,16 +189,14 @@ int main() {
 
 Process processConstructor(int _id, int _startTime, int _estTime, int _ioSize, int* _io) {
     int i;
-    int size = sizeof(_io) / sizeof(int);
     Process temp;
 
     temp.id = _id;
     temp.startTime = _startTime;
     temp.estTime = _estTime;
-    temp.ioSize = _ioSize;
-    temp.io = (int*) malloc(sizeof(_io));
-    for (i = 0; i < size; i++) {
-        temp.io[i] = _io[i];
+    temp.io = ioVectorConstructor(_ioSize);
+    for (i = 0; i < _ioSize; i++) {
+        pushToIOVector(&temp.io, _io[i]);
     }
 
     return temp;
@@ -215,6 +236,18 @@ ProcessVector processVectorConstructor(int _size) {
     return temp;
 }
 
+IOVector ioVectorConstructor(int _size) {
+    IOVector temp;
+
+    temp.ioInList = 0;
+    temp.start = 0;
+
+    temp.maxListSize = _size;
+    temp.ioTimes = (int*) malloc(sizeof(int) * _size);
+
+    return temp;
+}
+
 int compareEvents(const void *e1, const void *e2) {
     Event event1 = *((Event*) e1);
     Event event2 = *((Event*) e2);
@@ -230,11 +263,17 @@ int compareProcesses(const void *p1, const void *p2) {
 }
 
 void sortEventList(EventVector *events) {
-    qsort(events->eventList, events->eventsInList, sizeof(Event), compareEvents);
+    qsort(events->eventList + events->start, 
+          events->eventsInList - events->start,
+          sizeof(Event),
+          compareEvents);
 }
 
 void sortProcessList(ProcessVector *processes) {
-    qsort(processes->processList, processes->processesInList, sizeof(Process), compareProcesses);
+    qsort(processes->processList + processes->start,
+          processes->processesInList - processes->start,
+          sizeof(Process),
+          compareProcesses);
 }
 
 Process findProcessById(ProcessVector list, int processId) {
@@ -263,8 +302,23 @@ void pushToEventVector(EventVector *vector, Event event) {
     vector->eventsInList++;
 }
 
+void pushToIOVector(IOVector *vector, int ioTime) {
+    if (vector->ioInList == vector->maxListSize) {
+        vector->ioTimes = (int*) realloc(vector->ioTimes, 2 * vector->maxListSize * sizeof(int));
+        vector->maxListSize *= 2;
+    }
+    vector->ioTimes[vector->ioInList] = ioTime;
+    vector->ioInList++;
+}
+
 Process popFromProcessVector(ProcessVector *vector) {
     Process temp = vector->processList[vector->start];
     vector->start++;
+    return temp;
+}
+
+int popFromIOVector(IOVector *io) {
+    int temp = io->ioTimes[io->start];
+    io->start++;
     return temp;
 }
