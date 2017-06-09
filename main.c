@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 typedef struct _ioVector {
     int maxListSize, ioInList, start;
@@ -43,14 +44,20 @@ void pushToIOVector(IOVector*, int);
 Process popFromProcessVector(ProcessVector*);
 int popFromIOVector(IOVector*);
 
-int main() {
+int main(int argc, char **argv) {
     int numberOfProcesses;
     int currentTime = 0;
+    int speed = 0;
     Process currentProcess;
     EventVector events;
     ProcessVector list;
     ProcessVector waiting;
     ProcessVector ioWaiting;
+
+    /* TIME BETWEEN PRINTS */
+    if(argc > 1) {
+        speed = atoi(argv[1]);
+    }
 
     scanf("%d", &numberOfProcesses);
     list = processVectorConstructor(numberOfProcesses);
@@ -97,6 +104,7 @@ int main() {
         /*MORE THAN 1 EVENT CAN OCCUR AT ONCE, MUST BE A WHILE LOOP*/
         printf("\nEVENTS:\n");
         sortEventList(&events);
+
         while (events.eventList[events.start].eventTime == currentTime) {
             switch (events.eventList[events.start].type) {
                 case 0:                
@@ -181,7 +189,11 @@ int main() {
             printf("\n");
         }
 
+        printf("\n-------------------------------\n");
+
         currentTime++;
+
+        sleep(speed);
     }
     
     return 0;
